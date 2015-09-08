@@ -30,28 +30,32 @@ public abstract class AsyncWork extends WorkFlow {
             @Override
             public void run() {
                 workAsync();
-
-                if (handlerPostBack == null) {
-                    listener.onDone(AsyncWork.this, resultObject);
-                } else {
-                    Runnable runnablePostBack = new Runnable() {
-                        @Override
-                        public void run() {
-                            listener.onDone(AsyncWork.this, resultObject);
-                        }
-                    };
-
-                    handlerPostBack.post(runnablePostBack);
-                }
-
-                threadBg.quit();
             }
         };
 
         handlerBg.post(runnableWork);
     }
 
+    protected void finishWork() {
+        if (handlerPostBack == null) {
+            listener.onDone(AsyncWork.this, resultObject);
+        } else {
+            Runnable runnablePostBack = new Runnable() {
+                @Override
+                public void run() {
+                    listener.onDone(AsyncWork.this, resultObject);
+                }
+            };
+
+            handlerPostBack.post(runnablePostBack);
+        }
+
+        threadBg.quit();
+    }
+
     protected void setResult(Object object) { this.resultObject = object; }
 
-    public abstract void workAsync();
+    protected void workAsync() {
+        finishWork();
+    }
 }

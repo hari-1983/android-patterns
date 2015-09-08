@@ -39,5 +39,10 @@ public abstract class WorkFlow {
         this.listener = listener;
     }
 
-    public abstract void work();
+    public void work() {
+        workSync();
+        listener.onDone(this, null);
+    }
+
+    protected void workSync() {}
 }
