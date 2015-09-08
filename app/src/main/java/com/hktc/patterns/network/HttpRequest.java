@@ -122,6 +122,9 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
             }
         }
     };
+    
+    public String getUrl() { return url; }
+    public long getTimeout() { return timeout; }
 
     public void setUrl(String url) { this.url = url; }
     public void setTimeout(long timeout) { this.timeout = timeout; }
