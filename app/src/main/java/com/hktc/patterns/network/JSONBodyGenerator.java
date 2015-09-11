@@ -3,6 +3,7 @@ package com.hktc.patterns.network;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -19,12 +20,12 @@ public class JSONBodyGenerator implements IBodyGenerator {
     }
 
     @Override
-    public byte[] getBody(Map<String, byte[]> params) {
+    public byte[] getBody(ArrayList<HttpRequest.PostData> params) {
         JSONObject jsonObject = new JSONObject();
 
-        for (String key:params.keySet()) {
+        for (HttpRequest.PostData postData:params) {
             try {
-                jsonObject.put(key, new String(params.get(key)));
+                jsonObject.put(postData.key, new String(postData.data));
             } catch (JSONException e) { return null; }
         }
 

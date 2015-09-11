@@ -1,5 +1,6 @@
 package com.hktc.patterns.network;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 /**
@@ -7,5 +8,5 @@ import java.util.Map;
  */
 public interface IBodyGenerator {
     Map<String, String> getExtraHeaders();
-    byte[] getBody(Map<String, byte[]> params);
+    byte[] getBody(ArrayList<HttpRequest.PostData> params);
 }

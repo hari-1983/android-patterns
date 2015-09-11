@@ -4,6 +4,7 @@ import org.apache.http.protocol.HTTP;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -20,18 +21,18 @@ public class URLEncodedBodyGenerator implements IBodyGenerator {
     }
 
     @Override
-    public byte[] getBody(Map<String, byte[]> params) {
+    public byte[] getBody(ArrayList<HttpRequest.PostData> params) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
         boolean useDelimiter = false;
-        for (String key:params.keySet()) {
+        for (HttpRequest.PostData postData:params) {
             try {
                 if (useDelimiter) {
                     outputStream.write((byte) '&');
                 }
-                outputStream.write(key.getBytes());
+                outputStream.write(postData.key.getBytes());
                 outputStream.write((byte) '=');
-                outputStream.write(params.get(key));
+                outputStream.write(postData.data);
 
                 useDelimiter = true;
 

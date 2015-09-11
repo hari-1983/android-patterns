@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -62,6 +63,14 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
         public void onSuccess(HttpRequest request, String mime, byte[] data);
     }
 
+    class PostData {
+        boolean isBinary;
+        String mime;
+        String filename;
+        String key;
+        byte[] data;
+    }
+
     private static final String TAG = "Patterns/HttpRequest";
     private static final int RESPONSE_FAILURE_THRESHOLD = 400;
 
@@ -72,7 +81,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     private Context context;
     private Method method;
     private RequestMime requestMime;
-    private Map<String, byte[]> requestParams;
+    private ArrayList<PostData> requestParams;
 
     private byte[] response;
     private HttpURLConnection conn;
@@ -108,9 +117,20 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
 
                 conn = (HttpURLConnection) new URL(url).openConnection();
                 Log.d(TAG, "Connection opened to " + url);
-                
-                //TODO: Code to send post data
-                
+
+                if (requestParams.size() > 0) {
+                    IBodyGenerator bodyGenerator
+                        = BodyGeneratorFactory.getInstance().getBodyGenerator(requestMime);
+                    for (String headerName : bodyGenerator.getExtraHeaders().keySet()) {
+                        conn.addRequestProperty(headerName
+                            , bodyGenerator.getExtraHeaders().get(headerName));
+                    }
+
+                    byte[] payload = bodyGenerator.getBody(requestParams);
+                    conn.setRequestProperty("Content-Length", "" + payload.length);
+                    conn.getOutputStream().write(payload);
+                }
+
                 mime = conn.getContentType();
                 contentLength = conn.getContentLength();
                 
@@ -164,7 +184,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     };
 
     public HttpRequest() {
-        requestParams = new TreeMap<String, byte[]>();
+        requestParams = new ArrayList<PostData>();
     }
 
     public void setUrl(String url) { this.url = url; }
@@ -175,22 +195,32 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     public void setMethod(Method method) { this.method = method; }
     public void setRequestMime(RequestMime mime) { this.requestMime = mime; }
 
-    public void addParam(String key, String value) {
-        addParam(key, value.getBytes());
+    public void addParam(String key, String value){
+        PostData postData = new PostData();
+        postData.key = key;
+        postData.isBinary = false;
+        postData.data = value.getBytes();
+        requestParams.add(postData);
     }
 
-    public void addParam(String key, File file) {
+    public void addParam(String key, File file, String mime) {
         try {
             FileInputStream inputStream = new FileInputStream(file);
             int fileSize = (int) file.length();
             byte[] fileBytes = new byte[fileSize];
             inputStream.read(fileBytes, 0, fileSize);
-            addParam(key, fileBytes);
+            addParam(key, fileBytes, file.getName(), mime);
         } catch (IOException e) { return; }
     }
 
-    public void addParam(String key, byte[] data) {
-        requestParams.put(key, data);
+    public void addParam(String key, byte[] data, String fileName, String mime) {
+        PostData postData = new PostData();
+        postData.key = key;
+        postData.isBinary = true;
+        postData.data = data;
+        postData.mime = mime;
+        postData.filename = fileName;
+        requestParams.add(postData);
     }
 
     public void request() {
