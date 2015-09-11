@@ -1,11 +1,16 @@
 package com.hktc.patterns.network;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Map;
+import java.util.TreeMap;
 
+import android.app.DownloadManager;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -19,6 +24,36 @@ import com.hktc.patterns.workflow.WorkFlow;
  * Created by hari on 11/7/15.
  */
 public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
+    public enum Method {
+        GET("GET"),
+        POST("POST"),
+        PUT("PUT"),
+        DELETE("DELETE"),
+        HEAD("HEAD");
+
+        private String method;
+        Method(String method) { this.method = method; }
+        public String getMethod() { return method; }
+    }
+
+    public enum RequestMime {
+        URL_ENCODED("application/x-www-form-urlencoded"),
+        MULTIPART("multipart/form-data"),
+        JSON("application/json");
+
+        private String mime;
+        RequestMime(String mime) { this.mime = mime; }
+        public String getMime() { return mime; }
+    }
+
+    public enum Header {
+        CONTENT_TYPE("Content-Type");
+
+        private String header;
+        Header(String header) { this.header = header; }
+        public String getHeader() { return header; }
+    }
+
     public interface ResponseListener {
         public void onOffline(HttpRequest request);
         public void onConnected(HttpRequest request);
@@ -28,13 +63,16 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     }
 
     private static final String TAG = "Patterns/HttpRequest";
-    private static final int RESPONSE_OK = 200;
+    private static final int RESPONSE_FAILURE_THRESHOLD = 400;
 
     private String url;
     private long timeout;
     private ResponseListener responseListener;
     private Handler handlerCallback;
     private Context context;
+    private Method method;
+    private RequestMime requestMime;
+    private Map<String, byte[]> requestParams;
 
     private byte[] response;
     private HttpURLConnection conn;
@@ -61,6 +99,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
             }
             
             Log.d(TAG, networkInfo.getTypeName() + " is up & running");
+            sendConnected();
 
             HttpURLConnection conn = null;
 
@@ -95,7 +134,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
                     Runnable runnable = new Runnable() {
                         @Override
                         public void run() {
-                            sendResponse(responseCode, mime, buffer);
+                        sendResponse(responseCode, mime, buffer);
                         }
                     };
 
@@ -106,15 +145,16 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
 
                 if (!hasTimedOut) {
                     if (handlerCallback == null) {
-                        responseListener.onFailure(HttpRequest.this, -1, null, null);
+                        sendResponse(-1, null, null);
                     } else {
-                        Runnable runnableFailure = new Runnable() {
+                        Runnable runnable = new Runnable() {
                             @Override
                             public void run() {
-                                responseListener.onFailure(HttpRequest.this, -1, null, null);
+                            sendResponse(-1, null, null);
                             }
                         };
-                        handlerCallback.post(runnableFailure);
+
+                        handlerCallback.post(runnable);
                     }
                 }
             } finally {
@@ -122,19 +162,36 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
             }
         }
     };
-    
-    public String getUrl() { return url; }
-    public long getTimeout() { return timeout; }
+
+    public HttpRequest() {
+        requestParams = new TreeMap<String, byte[]>();
+    }
 
     public void setUrl(String url) { this.url = url; }
     public void setTimeout(long timeout) { this.timeout = timeout; }
-    public void setResponseListener(ResponseListener listener) {
-    	responseListener = listener;
-	}
-    public void setCallbackHandler(Handler handler) {
-		handlerCallback = handler;
-	}
+    public void setResponseListener(ResponseListener listener) { responseListener = listener; }
+    public void setCallbackHandler(Handler handler) { handlerCallback = handler; }
     public void setContext(Context context) { this.context = context; }
+    public void setMethod(Method method) { this.method = method; }
+    public void setRequestMime(RequestMime mime) { this.requestMime = mime; }
+
+    public void addParam(String key, String value) {
+        addParam(key, value.getBytes());
+    }
+
+    public void addParam(String key, File file) {
+        try {
+            FileInputStream inputStream = new FileInputStream(file);
+            int fileSize = (int) file.length();
+            byte[] fileBytes = new byte[fileSize];
+            inputStream.read(fileBytes, 0, fileSize);
+            addParam(key, fileBytes);
+        } catch (IOException e) { return; }
+    }
+
+    public void addParam(String key, byte[] data) {
+        requestParams.put(key, data);
+    }
 
     public void request() {
     	networkRequest.setTimedWorkListener(this);
@@ -146,6 +203,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     public void onTimeout(AsyncTimedWork timedWork) {
         hasTimedOut = true;
         conn.disconnect();
+        sendTimeout();
     }
 
     @Override
@@ -158,7 +216,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     public void onFailed(WorkFlow workFlow, Throwable throwable) {}
 
     private void sendResponse(int responseCode, String mime, byte[] buffer) {
-        if (responseCode == RESPONSE_OK) {
+        if (responseCode > 0 && responseCode < RESPONSE_FAILURE_THRESHOLD) {
             responseListener.onSuccess(this, mime, buffer);
         } else {
             responseListener.onFailure(this, responseCode, mime, buffer);
@@ -179,6 +237,36 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
 			handlerCallback.post(runnableOffline);
 		}
 	}
+
+    private void sendConnected() {
+        if (handlerCallback == null) {
+            responseListener.onConnected(this);
+        } else {
+            Runnable runnableConnected = new Runnable() {
+                @Override
+                public void run() {
+                    responseListener.onConnected(HttpRequest.this);
+                }
+            };
+
+            handlerCallback.post(runnableConnected);
+        }
+    }
+
+    private void sendTimeout() {
+        if (handlerCallback == null) {
+            responseListener.onTimeout(this);
+        } else {
+            Runnable runnableTimeout = new Runnable() {
+                @Override
+                public void run() {
+                    responseListener.onTimeout(HttpRequest.this);
+                }
+            };
+
+            handlerCallback.post(runnableTimeout);
+        }
+    }
 
     private void cleanup() {
         if (connOutputStream != null) {

@@ -5,7 +5,6 @@ android {
     buildToolsVersion "23.0.0 rc2"
 
     defaultConfig {
-        applicationId "com.hktc.patterns"
         minSdkVersion 14
         targetSdkVersion 22
         versionCode 1
