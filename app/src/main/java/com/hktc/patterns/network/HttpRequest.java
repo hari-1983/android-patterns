@@ -1,5 +1,6 @@
 package com.hktc.patterns.network;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -8,6 +9,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -73,6 +75,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
 
     private static final String TAG = "Patterns/HttpRequest";
     private static final int RESPONSE_FAILURE_THRESHOLD = 400;
+    private static final int DEFAULT_BUFFER_SIZE = 4096;
 
     private String url;
     private long timeout;
@@ -117,6 +120,8 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
 
                 conn = (HttpURLConnection) new URL(url).openConnection();
                 Log.d(TAG, "Connection opened to " + url);
+                Log.d(TAG, "There are '" + requestParams.size() + "' params to send");
+                conn.setRequestMethod(method.getMethod());
 
                 if (requestParams.size() > 0) {
                     IBodyGenerator bodyGenerator
@@ -129,11 +134,28 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
                     byte[] payload = bodyGenerator.getBody(requestParams);
                     conn.setRequestProperty("Content-Length", "" + payload.length);
                     conn.getOutputStream().write(payload);
+                    Log.d(TAG, "Wrote '" + payload.length + "' bytes of payload");
+                }
+
+                Map<String, List<String>> map = conn.getHeaderFields();
+                for (String key:map.keySet()) {
+                    Log.d(TAG, "Received header with key '" + key + "', value '"
+                        + conn.getHeaderField(key) + "'");
                 }
 
                 mime = conn.getContentType();
+                if (mime == null || mime.isEmpty()) {
+                    mime = conn.getHeaderField("Content-Type");
+                }
+
                 contentLength = conn.getContentLength();
-                
+                if (contentLength < 0) {
+                    contentLength = conn.getHeaderFieldInt("Content-Length", -1);
+                }
+                if (contentLength < 0) {
+                    contentLength = DEFAULT_BUFFER_SIZE;
+                }
+
                 Log.d(TAG, "Reply received, Mime: " + mime
             		+ ", content length: " + contentLength);
 
@@ -145,16 +167,21 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
                 while (bytesReadSoFar < contentLength) {
                     bytesReadThisCall = connInputStream.read(buffer, bytesReadSoFar
                         , contentLength - bytesReadSoFar);
+                    if (bytesReadThisCall < 0) {
+                        break;
+                    }
                     bytesReadSoFar += bytesReadThisCall;
                 }
 
                 if (handlerCallback == null) {
-                    sendResponse(responseCode, mime, buffer);
+                    sendResponse(responseCode, mime, buffer, bytesReadSoFar);
                 } else {
+                    final int totalBytes = bytesReadSoFar;
+
                     Runnable runnable = new Runnable() {
                         @Override
                         public void run() {
-                        sendResponse(responseCode, mime, buffer);
+                        sendResponse(responseCode, mime, buffer, totalBytes);
                         }
                     };
 
@@ -165,12 +192,12 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
 
                 if (!hasTimedOut) {
                     if (handlerCallback == null) {
-                        sendResponse(-1, null, null);
+                        sendResponse(-1, null, null, 0);
                     } else {
                         Runnable runnable = new Runnable() {
                             @Override
                             public void run() {
-                            sendResponse(-1, null, null);
+                            sendResponse(-1, null, null, 0);
                             }
                         };
 
@@ -245,7 +272,13 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     @Override
     public void onFailed(WorkFlow workFlow, Throwable throwable) {}
 
-    private void sendResponse(int responseCode, String mime, byte[] buffer) {
+    private void sendResponse(int responseCode, String mime, byte[] buffer, int bytesRequired) {
+        if (buffer != null && buffer.length != bytesRequired) {
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            stream.write(buffer, 0, bytesRequired);
+            buffer = stream.toByteArray();
+        }
+
         if (responseCode > 0 && responseCode < RESPONSE_FAILURE_THRESHOLD) {
             responseListener.onSuccess(this, mime, buffer);
         } else {
