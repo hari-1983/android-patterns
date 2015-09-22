@@ -18,6 +18,8 @@ public class BodyGeneratorFactory {
             return new URLEncodedBodyGenerator();
         } else if (mime.equals(HttpRequest.RequestMime.JSON)) {
             return new JSONBodyGenerator();
+        } else if (mime.equals(HttpRequest.RequestMime.MULTIPART)) {
+            return new MultipartBodyGenerator();
         } else { return null; }
     }
 }
