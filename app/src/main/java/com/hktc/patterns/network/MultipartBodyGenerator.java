@@ -1,5 +1,7 @@
 package com.hktc.patterns.network;
 
+import android.util.Log;
+
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Array;
 import java.security.cert.CRL;
@@ -14,19 +16,14 @@ public class MultipartBodyGenerator implements IBodyGenerator {
     private static final String CRLF = "\r\n";
     private static final String DASHES = "--";
     private static final String BOUNDARY = "130UND4RY";
-    private static final String DECL = "Content-disposition: form-data; name=";
+    private static final String DECL = "Content-Disposition: form-data; name=";
+    private static final String TAG = "Patterns/Multipart";
+    private Map<String, String> headers = new TreeMap<String, String>();
+    private ByteArrayOutputStream stream = new ByteArrayOutputStream();
 
-    @Override
-    public Map<String, String> getExtraHeaders() {
-        Map<String, String> headers = new TreeMap<String, String>();
+    public MultipartBodyGenerator(ArrayList<HttpRequest.PostData> params) {
         headers.put(HttpRequest.Header.CONTENT_TYPE.getHeader()
-            , HttpRequest.RequestMime.MULTIPART.getMime() + ", boundary=" + BOUNDARY);
-        return headers;
-    }
-
-    @Override
-    public byte[] getBody(ArrayList<HttpRequest.PostData> params) {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                , HttpRequest.RequestMime.MULTIPART.getMime() + "; boundary=" + BOUNDARY);
 
         for (HttpRequest.PostData postData:params) {
             String leadup = DASHES + BOUNDARY + CRLF + DECL + "\"" + postData.key + "\"";
@@ -42,6 +39,20 @@ public class MultipartBodyGenerator implements IBodyGenerator {
             stream.write(CRLF.getBytes(), 0, CRLF.length());
         }
 
+        stream.write((DASHES + BOUNDARY + DASHES + CRLF).getBytes(), 0
+                , (DASHES + BOUNDARY + DASHES + CRLF).length());
+
+        headers.put(HttpRequest.Header.CONTENT_LENGTH.getHeader(), "" + stream.size());
+    }
+
+    @Override
+    public Map<String, String> getExtraHeaders() {
+        return headers;
+    }
+
+    @Override
+    public byte[] getBody() {
+        Log.d(TAG, new String(stream.toByteArray()));
         return stream.toByteArray();
     }
 }

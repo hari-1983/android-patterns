@@ -8,5 +8,5 @@ import java.util.Map;
  */
 public interface IBodyGenerator {
     Map<String, String> getExtraHeaders();
-    byte[] getBody(ArrayList<HttpRequest.PostData> params);
+    byte[] getBody();
 }

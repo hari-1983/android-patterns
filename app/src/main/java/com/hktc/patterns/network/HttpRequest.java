@@ -50,7 +50,8 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     }
 
     public enum Header {
-        CONTENT_TYPE("Content-Type");
+        CONTENT_TYPE("Content-Type")
+        , CONTENT_LENGTH("Content-Length");
 
         private String header;
         Header(String header) { this.header = header; }
@@ -75,7 +76,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
 
     private static final String TAG = "Patterns/HttpRequest";
     private static final int RESPONSE_FAILURE_THRESHOLD = 400;
-    private static final int DEFAULT_BUFFER_SIZE = 4096;
+    private static final int DEFAULT_BUFFER_SIZE = 102400;
 
     private String url;
     private long timeout;
@@ -121,17 +122,22 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
                 conn = (HttpURLConnection) new URL(url).openConnection();
                 Log.d(TAG, "Connection opened to " + url);
                 Log.d(TAG, "There are '" + requestParams.size() + "' params to send");
+                Log.d(TAG, "Setting method to '" + method.getMethod() + "'");
                 conn.setRequestMethod(method.getMethod());
 
-                if (requestParams.size() > 0) {
+                if (!method.equals(Method.GET) && requestParams.size() > 0) {
                     IBodyGenerator bodyGenerator
-                        = BodyGeneratorFactory.getInstance().getBodyGenerator(requestMime);
+                        = BodyGeneratorFactory.getInstance().getBodyGenerator(
+                            requestMime, requestParams);
+
                     for (String headerName : bodyGenerator.getExtraHeaders().keySet()) {
+                        Log.d(TAG, "Adding header, " + headerName + ":"
+                                + bodyGenerator.getExtraHeaders().get(headerName));
                         conn.addRequestProperty(headerName
                             , bodyGenerator.getExtraHeaders().get(headerName));
                     }
 
-                    byte[] payload = bodyGenerator.getBody(requestParams);
+                    byte[] payload = bodyGenerator.getBody();
                     conn.setRequestProperty("Content-Length", "" + payload.length);
                     conn.getOutputStream().write(payload);
                     Log.d(TAG, "Wrote '" + payload.length + "' bytes of payload");
@@ -259,8 +265,10 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     @Override
     public void onTimeout(AsyncTimedWork timedWork) {
         hasTimedOut = true;
-        conn.disconnect();
-        sendTimeout();
+        if (conn != null) {
+            conn.disconnect();
+            sendTimeout();
+        }
     }
 
     @Override

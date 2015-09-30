@@ -12,17 +12,12 @@ import java.util.TreeMap;
  * Created by hari on 11/9/15.
  */
 public class URLEncodedBodyGenerator implements IBodyGenerator {
-    @Override
-    public Map<String, String> getExtraHeaders() {
-        Map<String, String> headers = new TreeMap<String, String>();
-        headers.put(HttpRequest.Header.CONTENT_TYPE.getHeader()
-            , HttpRequest.RequestMime.URL_ENCODED.getMime());
-        return headers;
-    }
+    private Map<String, String> headers = new TreeMap<String, String>();
+    private ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
-    @Override
-    public byte[] getBody(ArrayList<HttpRequest.PostData> params) {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    URLEncodedBodyGenerator(ArrayList<HttpRequest.PostData> params) {
+        headers.put(HttpRequest.Header.CONTENT_TYPE.getHeader()
+                , HttpRequest.RequestMime.URL_ENCODED.getMime());
 
         boolean useDelimiter = false;
         for (HttpRequest.PostData postData:params) {
@@ -36,9 +31,17 @@ public class URLEncodedBodyGenerator implements IBodyGenerator {
 
                 useDelimiter = true;
 
-            } catch (IOException e) { return null; }
+            } catch (IOException e) {}
         }
+    }
 
+    @Override
+    public Map<String, String> getExtraHeaders() {
+        return headers;
+    }
+
+    @Override
+    public byte[] getBody() {
         return outputStream.toByteArray();
     }
 }
