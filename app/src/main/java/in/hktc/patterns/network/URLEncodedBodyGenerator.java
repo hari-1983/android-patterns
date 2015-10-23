@@ -1,6 +1,4 @@
-package com.hktc.patterns.network;
-
-import org.apache.http.protocol.HTTP;
+package in.hktc.patterns.network;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

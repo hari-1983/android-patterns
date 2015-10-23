@@ -1,10 +1,8 @@
-package com.hktc.patterns.network;
+package in.hktc.patterns.network;
 
 import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
-import java.lang.reflect.Array;
-import java.security.cert.CRL;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.TreeMap;

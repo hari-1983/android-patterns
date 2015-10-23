@@ -1,4 +1,4 @@
-package com.hktc.patterns.workflow;
+package in.hktc.patterns.workflow;
 
 import java.util.HashMap;
 

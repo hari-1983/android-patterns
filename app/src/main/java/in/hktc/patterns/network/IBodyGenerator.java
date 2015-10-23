@@ -1,6 +1,5 @@
-package com.hktc.patterns.network;
+package in.hktc.patterns.network;
 
-import java.util.ArrayList;
 import java.util.Map;
 
 /**

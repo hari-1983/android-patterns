@@ -1,4 +1,4 @@
-package com.hktc.patterns.network;
+package in.hktc.patterns.network;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -13,20 +13,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-import android.app.DownloadManager;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Handler;
 import android.util.Log;
 
-import com.hktc.patterns.workflow.AsyncTimedWork;
-import com.hktc.patterns.workflow.WorkFlow;
+import in.hktc.patterns.workflow.AsyncTimedWork;
+import in.hktc.patterns.workflow.WorkFlow;
 
 /**
  * Created by hari on 11/7/15.
  */
-public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
+public class HttpRequest implements AsyncTimedWork.TimedWorkListener, Comparable<HttpRequest> {
     public enum Method {
         GET("GET"),
         POST("POST"),
@@ -38,6 +37,8 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
         Method(String method) { this.method = method; }
         public String getMethod() { return method; }
     }
+
+    public enum ResponseType { WHOLE, CHUNKED }
 
     public enum RequestMime {
         URL_ENCODED("application/x-www-form-urlencoded"),
@@ -64,6 +65,8 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
         public void onTimeout(HttpRequest request);
         public void onFailure(HttpRequest request, int statusCode, String mime, byte[] data);
         public void onSuccess(HttpRequest request, String mime, byte[] data);
+        public void onProgress(HttpRequest request, int percent);
+        public void onChunkAvailable(HttpRequest request, byte[] chunk);
     }
 
     class PostData {
@@ -76,7 +79,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
 
     private static final String TAG = "Patterns/HttpRequest";
     private static final int RESPONSE_FAILURE_THRESHOLD = 400;
-    private static final int DEFAULT_BUFFER_SIZE = 102400;
+    private static final int DEFAULT_BUFFER_SIZE = 1048576;
 
     private String url;
     private long timeout;
@@ -86,6 +89,9 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     private Method method;
     private RequestMime requestMime;
     private ArrayList<PostData> requestParams;
+    private int percentProgress;
+    private ResponseType responseType = ResponseType.WHOLE;
+    private Map<String, String> headers = new TreeMap<String, String>();
 
     private byte[] response;
     private HttpURLConnection conn;
@@ -95,6 +101,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     private int responseCode;
     private int contentLength;
     private String mime;
+    private boolean isCancelled = false;
 
     private AsyncTimedWork networkRequest = new AsyncTimedWork() {
         @Override
@@ -124,6 +131,11 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
                 Log.d(TAG, "There are '" + requestParams.size() + "' params to send");
                 Log.d(TAG, "Setting method to '" + method.getMethod() + "'");
                 conn.setRequestMethod(method.getMethod());
+
+                for (String headerName:headers.keySet()) {
+                    Log.d(TAG, "Adding header " + headerName + ": " + headers.get(headerName));
+                    conn.addRequestProperty(headerName, headers.get(headerName));
+                }
 
                 if (!method.equals(Method.GET) && requestParams.size() > 0) {
                     IBodyGenerator bodyGenerator
@@ -168,35 +180,109 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
                 responseCode = conn.getResponseCode();
                 Log.d(TAG, "Response code: " + responseCode);
 
-                connInputStream = conn.getInputStream();
-                final byte[] buffer = new byte[contentLength];
-                while (bytesReadSoFar < contentLength) {
-                    bytesReadThisCall = connInputStream.read(buffer, bytesReadSoFar
-                        , contentLength - bytesReadSoFar);
-                    if (bytesReadThisCall < 0) {
-                        break;
-                    }
-                    bytesReadSoFar += bytesReadThisCall;
+                if (responseCode >= RESPONSE_FAILURE_THRESHOLD) {
+                    connInputStream = conn.getErrorStream();
+                } else {
+                    connInputStream = conn.getInputStream();
                 }
 
-                if (handlerCallback == null) {
-                    sendResponse(responseCode, mime, buffer, bytesReadSoFar);
-                } else {
-                    final int totalBytes = bytesReadSoFar;
+                /* Determine buffer size */
+                int bufferSize = 0;
+                if (responseType.equals(ResponseType.CHUNKED)) {
+                    bufferSize = DEFAULT_BUFFER_SIZE;
+                } else if (responseType.equals(ResponseType.WHOLE)) {
+                    bufferSize = contentLength;
+                }
 
-                    Runnable runnable = new Runnable() {
-                        @Override
-                        public void run() {
-                        sendResponse(responseCode, mime, buffer, totalBytes);
+                final byte[] buffer = new byte[bufferSize];
+                while (bytesReadSoFar < contentLength) {
+                    bytesReadThisCall = 0;
+
+                    if (responseType.equals(ResponseType.WHOLE)) {
+                        bytesReadThisCall = connInputStream.read(buffer, bytesReadSoFar
+                                , contentLength - bytesReadSoFar);
+                        if (bytesReadThisCall < 0) {
+                            break;
                         }
-                    };
+                    } else if (responseType.equals(ResponseType.CHUNKED)) {
+                        bytesReadThisCall = connInputStream.read(buffer, 0, buffer.length);
+                    }
 
-                    handlerCallback.post(runnable);
+                    bytesReadSoFar += bytesReadThisCall;
+
+                    if (contentLength > 0) {
+                        percentProgress = (bytesReadSoFar * 100) / contentLength;
+
+                        if (handlerCallback == null) {
+                            responseListener.onProgress(HttpRequest.this, percentProgress);
+                        } else {
+                            Runnable runnable = new Runnable() {
+                                @Override
+                                public void run() {
+                                    responseListener.onProgress(HttpRequest.this, percentProgress);
+                                }
+                            };
+                            handlerCallback.post(runnable);
+                        }
+                    }
+
+                    if (responseType.equals(ResponseType.CHUNKED)) {
+                        final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                        outputStream.write(buffer, 0, bytesReadThisCall);
+
+                        if (handlerCallback == null) {
+                            responseListener.onChunkAvailable(HttpRequest.this
+                                    , outputStream.toByteArray());
+                        } else {
+                            Runnable runnable = new Runnable() {
+                                @Override
+                                public void run() {
+                                    responseListener.onChunkAvailable(HttpRequest.this
+                                            , outputStream.toByteArray());
+                                }
+                            };
+                            handlerCallback.post(runnable);
+                        }
+
+                        outputStream.close();
+                    }
+                }
+
+                if (responseType.equals(ResponseType.WHOLE)) {
+                    if (handlerCallback == null) {
+                        sendResponse(responseCode, mime, buffer, bytesReadSoFar);
+                    } else {
+                        final int totalBytes = bytesReadSoFar;
+
+                        Runnable runnable = new Runnable() {
+                            @Override
+                            public void run() {
+                                sendResponse(responseCode, mime, buffer, totalBytes);
+                            }
+                        };
+
+                        handlerCallback.post(runnable);
+                    }
+                } else {
+                    if (handlerCallback == null) {
+                        sendResponse(responseCode, mime, null, 0);
+                    } else {
+                        final int totalBytes = bytesReadSoFar;
+
+                        Runnable runnable = new Runnable() {
+                            @Override
+                            public void run() {
+                                sendResponse(responseCode, mime, null, 0);
+                            }
+                        };
+
+                        handlerCallback.post(runnable);
+                    }
                 }
             } catch (IOException e) {
                 e.printStackTrace();
 
-                if (!hasTimedOut) {
+                if (!hasTimedOut && !isCancelled) {
                     if (handlerCallback == null) {
                         sendResponse(-1, null, null, 0);
                     } else {
@@ -227,6 +313,11 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
     public void setContext(Context context) { this.context = context; }
     public void setMethod(Method method) { this.method = method; }
     public void setRequestMime(RequestMime mime) { this.requestMime = mime; }
+    public void setResponseType(ResponseType responseType) { this.responseType = responseType; }
+
+    public String getUrl() { return url; }
+    public int getPercentProgress() { return percentProgress; }
+    public ResponseType getResponseType() { return responseType; }
 
     public void addParam(String key, String value){
         PostData postData = new PostData();
@@ -254,6 +345,10 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
         postData.mime = mime;
         postData.filename = fileName;
         requestParams.add(postData);
+    }
+
+    public void addHeader(String headerName, String headerValue) {
+        headers.put(headerName, headerValue);
     }
 
     public void request() {
@@ -339,6 +434,11 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
         }
     }
 
+    public void cancel() {
+        isCancelled = true;
+        if (conn != null) { conn.disconnect(); }
+    }
+
     private void cleanup() {
         if (connOutputStream != null) {
             try { connOutputStream.close();} catch (IOException e) {}
@@ -354,5 +454,10 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener {
             conn.disconnect();
             conn = null;
         }
+    }
+
+    @Override
+    public int compareTo(HttpRequest httpRequest) {
+        return (getUrl().equals(httpRequest.getUrl()) ? 0 : 1);
     }
 }

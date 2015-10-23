@@ -1,4 +1,4 @@
-package com.hktc.patterns.network;
+package in.hktc.patterns.network;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -12,17 +12,15 @@ import java.util.TreeMap;
  */
 public class JSONBodyGenerator implements IBodyGenerator {
     private Map<String, String> headers = new TreeMap<String, String>();
-    private JSONObject json;
+    private JSONObject json = new JSONObject();
 
     JSONBodyGenerator(ArrayList<HttpRequest.PostData> params) {
         headers.put(HttpRequest.Header.CONTENT_TYPE.getHeader()
                 , HttpRequest.RequestMime.JSON.getMime());
 
-        JSONObject jsonObject = new JSONObject();
-
         for (HttpRequest.PostData postData:params) {
             try {
-                jsonObject.put(postData.key, new String(postData.data));
+                json.put(postData.key, new String(postData.data));
             } catch (JSONException e) { continue; }
         }
 
