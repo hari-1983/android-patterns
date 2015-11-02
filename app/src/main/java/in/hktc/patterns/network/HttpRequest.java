@@ -90,6 +90,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener, Comparable
     private RequestMime requestMime;
     private ArrayList<PostData> requestParams;
     private int percentProgress;
+    private String requestCode = "";
     private ResponseType responseType = ResponseType.WHOLE;
     private Map<String, String> headers = new TreeMap<String, String>();
 
@@ -314,8 +315,10 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener, Comparable
     public void setMethod(Method method) { this.method = method; }
     public void setRequestMime(RequestMime mime) { this.requestMime = mime; }
     public void setResponseType(ResponseType responseType) { this.responseType = responseType; }
+    public void setRequestCode(String requestCode) { this.requestCode = requestCode; }
 
     public String getUrl() { return url; }
+    public String getRequestCode() { return requestCode; }
     public int getPercentProgress() { return percentProgress; }
     public ResponseType getResponseType() { return responseType; }
 
@@ -458,6 +461,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener, Comparable
 
     @Override
     public int compareTo(HttpRequest httpRequest) {
-        return (getUrl().equals(httpRequest.getUrl()) ? 0 : 1);
+        return (getUrl().equals(httpRequest.getUrl())
+            && getRequestCode().equals(httpRequest.getRequestCode()) ? 0 : 1);
     }
 }
