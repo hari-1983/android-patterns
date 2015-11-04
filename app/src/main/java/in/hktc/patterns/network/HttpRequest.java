@@ -152,7 +152,7 @@ public class HttpRequest implements AsyncTimedWork.TimedWorkListener, Comparable
 
                     byte[] payload = bodyGenerator.getBody();
                     conn.setRequestProperty("Content-Length", "" + payload.length);
-                    conn.getOutputStream().write(payload);
+                    conn.getOutputStream().write(payload, 0, payload.length);
                     Log.d(TAG, "Wrote '" + payload.length + "' bytes of payload");
                 }
 
