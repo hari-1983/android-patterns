@@ -17,6 +17,6 @@ public class API {
         public static final String TRACE = "trace";
     }
 
-    public static final String URL = "http://192.168.1.102:8080/AppErrorLogger/v1/error-logs";
+    public static final String URL = "http://hktc.in:8080/AppErrorLogger/v1/error-logs";
     public static final int TIMEOUT = 10000;
 }

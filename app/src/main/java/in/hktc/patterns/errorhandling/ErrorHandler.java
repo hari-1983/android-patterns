@@ -31,12 +31,10 @@ public class ErrorHandler implements Thread.UncaughtExceptionHandler {
         }
     };
 
-    public ErrorHandler(Context context, Handler handler, int layout
-            , Thread.UncaughtExceptionHandler defaultHandler) {
+    public ErrorHandler(Context context, Thread.UncaughtExceptionHandler defaultHandler) {
 
         this.context = context;
-        this.errorDumper = new ErrorDumper(handler, errorDumperListener);
-        this.layout = layout;
+        this.errorDumper = new ErrorDumper(errorDumperListener);
         this.defaultHandler = defaultHandler;
     }
 

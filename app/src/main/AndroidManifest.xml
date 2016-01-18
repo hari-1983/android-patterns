@@ -10,9 +10,6 @@
     <android:uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <android:uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
-    <application>
-        <activity android:name=".errorhandling.CrashLandingActivity" android:label="Crash">
-        </activity>
-    </application>
+    <application></application>
 
 </manifest>

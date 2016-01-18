@@ -11,7 +11,7 @@ import in.hktc.patterns.network.HttpRequest;
  */
 public class ErrorDumper {
     public interface ErrorDumperListener {
-        public void onDumped(ErrorDumper errorDumper);
+        void onDumped(ErrorDumper errorDumper);
     }
 
     private static final String TAG = "Patterns/Error";
@@ -57,12 +57,11 @@ public class ErrorDumper {
         }
     };
 
-    public ErrorDumper(Handler handler, ErrorDumperListener listener) {
-        this.handler = handler;
+    public ErrorDumper(ErrorDumperListener listener) {
         this.errorDumperListener = listener;
     }
 
-    public void dump(final ErrorDump dump) {
+    public void dump(ErrorDump dump) {
         Log.d(TAG, dump.getAppPackage());
         Log.d(TAG, dump.getVersionReadable());
         Log.d(TAG, String.valueOf(dump.getVersionCode()));
